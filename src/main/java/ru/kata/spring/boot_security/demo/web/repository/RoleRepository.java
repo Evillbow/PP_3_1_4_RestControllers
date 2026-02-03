@@ -5,6 +5,7 @@ import ru.kata.spring.boot_security.demo.web.model.Role;
 
 import javax.persistence.EntityManager;
 import javax.persistence.PersistenceContext;
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -19,6 +20,11 @@ public class RoleRepository {
                 .setParameter("name", name)
                 .getResultStream()
                 .findFirst();
+    }
+
+    public List<Role> findAll() {
+        return entityManager.createQuery("select r from Role r", Role.class)
+                .getResultList();
     }
 
     public void save(Role role) {
