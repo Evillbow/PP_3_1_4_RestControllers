@@ -1,7 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
     const usersTbody = document.getElementById('usersTbody');
 
-    // CSRF из meta (добавим в head fragment)
+    // CSRF из meta
     const csrfToken = document.querySelector('meta[name="_csrf"]')?.content;
     const csrfHeader = document.querySelector('meta[name="_csrf_header"]')?.content;
 
@@ -13,6 +13,54 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const roleLabel = (roleName) => roleName.replace('ROLE_', '');
 
+    // ===== Error helpers =====
+    async function readApiError(res) {
+        let data = null;
+        try {
+            data = await res.json();
+        } catch (e) {
+            // например 204 или backend вернул не-json
+        }
+
+        const message = data?.message ?? `HTTP ${res.status}`;
+        const fieldErrors = data?.fieldErrors ?? null;
+
+        return { status: res.status, message, fieldErrors };
+    }
+
+    function ensureAlertContainer(formEl) {
+        // создаём один контейнер под алерты в начале формы
+        let box = formEl.querySelector('.js-form-alert');
+        if (!box) {
+            box = document.createElement('div');
+            box.className = 'js-form-alert mb-3';
+            formEl.prepend(box);
+        }
+        return box;
+    }
+
+    function clearFormError(formEl) {
+        const box = formEl.querySelector('.js-form-alert');
+        if (box) box.innerHTML = '';
+    }
+
+    function showFormError(formEl, html) {
+        const box = ensureAlertContainer(formEl);
+        box.innerHTML = `
+          <div class="alert alert-danger py-2 mb-0" role="alert">
+            ${html}
+          </div>
+        `;
+    }
+
+    function fieldErrorsToHtml(fieldErrors) {
+        const items = Object.entries(fieldErrors).map(([field, msg]) => {
+            return `<li><strong>${field}:</strong> ${msg}</li>`;
+        }).join('');
+        return `<div class="fw-semibold mb-1">Fix the following:</div><ul class="mb-0">${items}</ul>`;
+    }
+
+    // ===== Data loaders =====
     async function loadUsers() {
         const res = await fetch('/api/admin/users', { credentials: 'same-origin' });
         const users = await res.json();
@@ -64,8 +112,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     loadRolesInto(newRoles);
 
+    // очищаем ошибки при открытии/вводе
+    newForm.addEventListener('input', () => clearFormError(newForm));
+
     newForm.addEventListener('submit', async (e) => {
         e.preventDefault();
+        clearFormError(newForm);
 
         const payload = {
             name: document.getElementById('newName').value,
@@ -84,14 +136,22 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         if (!res.ok) {
-            alert('Create failed (check console / server logs)');
+            const err = await readApiError(res);
+
+            if (err.status === 400 && err.fieldErrors) {
+                showFormError(newForm, fieldErrorsToHtml(err.fieldErrors));
+            } else if (err.status === 409) {
+                showFormError(newForm, err.message || 'User with same username already exists');
+            } else {
+                showFormError(newForm, err.message || 'Create failed');
+            }
             return;
         }
 
         newForm.reset();
         await loadUsers();
 
-        // переключение на вкладку Users table (если хочешь)
+        // переключение на вкладку Users table (если нужно)
         const usersTabBtn = document.querySelector('button[data-bs-target="#usersTable"]');
         usersTabBtn?.click();
     });
@@ -103,9 +163,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     loadRolesInto(editRoles);
 
+    editForm.addEventListener('input', () => clearFormError(editForm));
+
     usersTbody.addEventListener('click', async (e) => {
         const editBtn = e.target.closest('.btn-edit');
         if (!editBtn) return;
+
+        clearFormError(editForm);
 
         const id = editBtn.dataset.id;
         const res = await fetch(`/api/admin/users/${id}`, { credentials: 'same-origin' });
@@ -124,6 +188,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     editForm.addEventListener('submit', async (e) => {
         e.preventDefault();
+        clearFormError(editForm);
 
         const id = editId.value;
 
@@ -144,11 +209,19 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         if (!res.ok) {
-            alert('Update failed');
+            const err = await readApiError(res);
+
+            if (err.status === 400 && err.fieldErrors) {
+                showFormError(editForm, fieldErrorsToHtml(err.fieldErrors));
+            } else if (err.status === 409) {
+                showFormError(editForm, err.message || 'User with same username already exists');
+            } else {
+                showFormError(editForm, err.message || 'Update failed');
+            }
             return;
         }
 
-        // закрыть модалку bootstrap’ом
+        // закрыть модалку
         const modalEl = document.getElementById('editModal');
         const modal = bootstrap.Modal.getInstance(modalEl);
         modal?.hide();
@@ -159,10 +232,32 @@ document.addEventListener('DOMContentLoaded', () => {
     // ===== Delete modal =====
     const deleteBtnConfirm = document.getElementById('deleteConfirmBtn');
     const deleteId = document.getElementById('deleteId');
+    const deleteModalEl = document.getElementById('deleteModal');
+
+    // покажем ошибки удаления в самом deleteModal (внутри)
+    function showDeleteError(html) {
+        const body = deleteModalEl.querySelector('.modal-body');
+        let box = body.querySelector('.js-delete-alert');
+        if (!box) {
+            box = document.createElement('div');
+            box.className = 'js-delete-alert mb-2';
+            body.prepend(box);
+        }
+        box.innerHTML = `
+          <div class="alert alert-danger py-2 mb-0" role="alert">${html}</div>
+        `;
+    }
+    function clearDeleteError() {
+        const body = deleteModalEl.querySelector('.modal-body');
+        const box = body.querySelector('.js-delete-alert');
+        if (box) box.innerHTML = '';
+    }
 
     usersTbody.addEventListener('click', async (e) => {
         const delBtn = e.target.closest('.btn-delete');
         if (!delBtn) return;
+
+        clearDeleteError();
 
         const id = delBtn.dataset.id;
         deleteId.value = id;
@@ -174,6 +269,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     deleteBtnConfirm.addEventListener('click', async () => {
+        clearDeleteError();
+
         const id = deleteId.value;
 
         const res = await fetch(`/api/admin/users/${id}`, {
@@ -183,12 +280,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         if (!res.ok) {
-            alert('Delete failed');
+            const err = await readApiError(res);
+            showDeleteError(err.message || 'Delete failed');
             return;
         }
 
-        const modalEl = document.getElementById('deleteModal');
-        const modal = bootstrap.Modal.getInstance(modalEl);
+        const modal = bootstrap.Modal.getInstance(deleteModalEl);
         modal?.hide();
 
         await loadUsers();
@@ -197,3 +294,4 @@ document.addEventListener('DOMContentLoaded', () => {
     // initial
     loadUsers();
 });
+

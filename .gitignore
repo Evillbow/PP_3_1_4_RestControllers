@@ -1,5 +1,39 @@
+### Maven ###
 target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+
+### Spring Boot ###
+*.log
+logs/
+
+### IntelliJ IDEA ###
 .idea/
 *.iml
+*.iws
+*.ipr
+out/
+
+### OS ###
 .DS_Store
+Thumbs.db
+
+### Environment ###
+.env
+.env.local
+application-local.properties
+application-dev.properties
+
+### Database ###
+*.sql
+*.db
+
+### Lombok ###
+lombok.config
+
+### Node / Frontend (если появится позже) ###
 node_modules/
+dist/

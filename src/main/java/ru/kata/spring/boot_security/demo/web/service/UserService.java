@@ -26,17 +26,20 @@ public class UserService {
         this.roleRepository = roleRepository;
     }
 
-    @Transactional(readOnly = true)
     public List<User> getAllUsers() {
-        return userRepository.findAll();
+        return userRepository.findAllWithRoles();
     }
 
     @Transactional
-    public void addUser(User user, Set<String> roleNames) {
+    public User addUser(User user, Set<String> roleNames) {
+        if (userRepository.existsByUsername(user.getUsername())) {
+            throw new DuplicateUsernameException(user.getUsername());
+        }
         user.setPassword(passwordEncoder.encode(user.getPassword()));
         user.setRoles(resolveRoles(roleNames));
-        userRepository.save(user);
+        return userRepository.save(user);
     }
+
 
 
     @Transactional
@@ -46,12 +49,18 @@ public class UserService {
 
     @Transactional(readOnly = true)
     public User getUser(Long id) {
-        return userRepository.findById(id);
+        return userRepository.findByIdWithRoles(id);
     }
 
     @Transactional
     public void updateUser(User user, Set<String> roleNames) {
+
         User dbUser = userRepository.findById(user.getId());
+
+        if (!dbUser.getUsername().equals(user.getUsername())
+                && userRepository.existsByUsernameAndNotId(user.getUsername(), user.getId())) {
+            throw new DuplicateUsernameException(user.getUsername());
+        }
 
         dbUser.setUsername(user.getUsername());
         dbUser.setName(user.getName());

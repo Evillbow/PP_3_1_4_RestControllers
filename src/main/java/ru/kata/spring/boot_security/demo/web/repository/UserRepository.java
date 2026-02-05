@@ -33,8 +33,10 @@ public class UserRepository {
         return entityManager.find(User.class, id);
     }
 
-    public void save(User user) {
+    public User save(User user) {
         entityManager.persist(user);
+        entityManager.flush(); // важно для GenerationType.IDENTITY, чтобы id появился сразу
+        return user;
     }
 
     public User update(User user) {
@@ -55,6 +57,38 @@ public class UserRepository {
                 .getResultStream()
                 .findFirst();
     }
+
+    public boolean existsByUsername(String username) {
+        Long cnt = entityManager.createQuery(
+                        "select count(u) from User u where u.username = :username", Long.class)
+                .setParameter("username", username)
+                .getSingleResult();
+        return cnt != null && cnt > 0;
+    }
+
+    public List<User> findAllWithRoles() {
+        var graph = entityManager.getEntityGraph("User.roles");
+        return entityManager.createQuery("select u from User u", User.class)
+                .setHint("javax.persistence.fetchgraph", graph)
+                .getResultList();
+    }
+
+    public User findByIdWithRoles(Long id) {
+        return entityManager.createQuery(
+                        "select distinct u from User u left join fetch u.roles where u.id = :id", User.class)
+                .setParameter("id", id)
+                .getSingleResult();
+    }
+
+    public boolean existsByUsernameAndNotId(String username, Long id) {
+        Long cnt = entityManager.createQuery(
+                        "select count(u) from User u where u.username = :username and u.id <> :id", Long.class)
+                .setParameter("username", username)
+                .setParameter("id", id)
+                .getSingleResult();
+        return cnt != null && cnt > 0;
+    }
+
 
 }
 

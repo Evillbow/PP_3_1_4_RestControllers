@@ -8,6 +8,9 @@ import ru.kata.spring.boot_security.demo.web.dto.UserUpsertRequest;
 import ru.kata.spring.boot_security.demo.web.mapper.UserMapper;
 import ru.kata.spring.boot_security.demo.web.model.User;
 import ru.kata.spring.boot_security.demo.web.service.UserService;
+import org.springframework.validation.annotation.Validated;
+import ru.kata.spring.boot_security.demo.web.dto.ValidationGroups;
+
 
 import java.util.List;
 import java.util.Set;
@@ -37,7 +40,7 @@ public class AdminRestController {
     }
 
     @PostMapping
-    public ResponseEntity<UserDto> create(@RequestBody UserUpsertRequest req) {
+    public ResponseEntity<UserDto> create(@Validated(ValidationGroups.Create.class) @RequestBody UserUpsertRequest req) {
         User user = new User();
         user.setName(req.getName());
         user.setSurname(req.getSurname());
@@ -45,24 +48,15 @@ public class AdminRestController {
         user.setUsername(req.getUsername());
         user.setPassword(req.getPassword());
 
-        Set<String> roles = req.getRoles();
-        userService.addUser(user, roles);
+        User created = userService.addUser(user, req.getRoles());
 
-        // user уже сохранён, но id присваивается entityManager’ом.
-        // Для аккуратного ответа обычно перечитывают из БД по username.
-        // У тебя в репозитории есть findByUsername, но сервис не отдаёт — поэтому вернём список заново проще:
-        UserDto dto = UserMapper.toDto(
-                userService.getAllUsers().stream()
-                        .filter(u -> u.getUsername().equals(req.getUsername()))
-                        .findFirst()
-                        .orElseThrow()
-        );
-
-        return ResponseEntity.status(HttpStatus.CREATED).body(dto);
+        return ResponseEntity.status(HttpStatus.CREATED).body(UserMapper.toDto(created));
     }
 
+
     @PutMapping("/{id}")
-    public UserDto update(@PathVariable Long id, @RequestBody UserUpsertRequest req) {
+    public UserDto update(@PathVariable Long id,
+                          @Validated(ValidationGroups.Update.class) @RequestBody UserUpsertRequest req) {
         User user = new User();
         user.setId(id);
         user.setName(req.getName());
